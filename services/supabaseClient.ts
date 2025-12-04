@@ -1,16 +1,30 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Read Supabase config from environment. For client-side usage with Next.js,
-// prefer `NEXT_PUBLIC_*` prefixed variables so they are embedded in the client bundle.
-const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ??
-  process.env.SUPABASE_URL) as string | undefined;
-const SUPABASE_ANON_KEY = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
-  process.env.SUPABASE_ANON_KEY) as string | undefined;
+let clientCache: SupabaseClient | null = null;
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error(
-    'Missing Supabase environment variables. Define `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in your .env (or export them in your environment).'
-  );
+async function fetchClientConfig(): Promise<{ url: string; anon: string }> {
+  // If running on the server, read env directly (no build-time inlining).
+  if (typeof window === 'undefined') {
+    const url = process.env.SUPABASE_URL || process.env.SUPABASE_URL;
+    const anon = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+    if (!url || !anon)
+      throw new Error('Missing Supabase environment variables on server');
+    return { url, anon };
+  }
+
+  // Browser: fetch runtime config from server API so values are not embedded at build time
+  const res = await fetch('/api/supabase-config');
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error || 'Could not fetch Supabase config');
+  }
+  const json = await res.json();
+  return { url: json.url, anon: json.anon };
 }
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export async function getSupabaseClient(): Promise<SupabaseClient> {
+  if (clientCache) return clientCache;
+  const { url, anon } = await fetchClientConfig();
+  clientCache = createClient(url, anon);
+  return clientCache;
+}

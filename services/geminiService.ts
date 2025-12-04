@@ -1,44 +1,26 @@
-import { GoogleGenAI } from '@google/genai';
 import { JournalEntry } from '@/types';
 
-// Helper to check if API key is present
+// Client-side wrapper: calls the server API route which holds the real API key
 export const isAiAvailable = (): boolean => {
-  return !!process.env.NEXT_PUBLIC_GENAI_API_KEY;
+  // The client can't safely determine if the server key is configured; show the UI
+  // and handle errors from the server API when invoked.
+  return true;
 };
 
 export const GeminiService = {
   async generateReflection(entry: JournalEntry): Promise<string> {
-    if (!process.env.NEXT_PUBLIC_GENAI_API_KEY) {
-      throw new Error('API Key not configured');
-    }
-
-    const ai = new GoogleGenAI({
-      apiKey: process.env.NEXT_PUBLIC_GENAI_API_KEY,
+    const res = await fetch('/api/generate-reflection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(entry),
     });
-    try {
-      const prompt = `
-        Act as a supportive, mindful therapist and life coach. 
-        Read the following journal entry and provide a brief, warm, and insightful reflection (max 100 words).
-        Validate the user's feelings (Mood: ${entry.mood}) and offer a gentle perspective or a question for self-discovery.
-        
-        Journal Title: ${entry.title}
-        Content: ${entry.content}
-      `;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-          thinkingConfig: { thinkingBudget: 0 }, // Low latency preferred for UI feedback
-        },
-      });
-
-      return (
-        response.text || "I couldn't generate a reflection at this moment."
-      );
-    } catch (error) {
-      console.error('Gemini API Error:', error);
-      throw new Error('Failed to generate insight.');
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+      throw new Error(error?.error || 'AI service error');
     }
+
+    const json = await res.json();
+    return json.reflection as string;
   },
 };
