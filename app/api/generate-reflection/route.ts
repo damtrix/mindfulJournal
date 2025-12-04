@@ -20,6 +20,7 @@ export async function POST(req: Request) {
 
     const apiKey = process.env.GENAI_API_KEY;
     if (!apiKey) {
+      console.error('GENAI_API_KEY not set');
       return NextResponse.json(
         { error: 'AI service not configured' },
         { status: 500 }
@@ -39,34 +40,24 @@ export async function POST(req: Request) {
       Content: ${body.content}
     `;
 
+    // ✅ Important: contents must be an array
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: { thinkingConfig: { thinkingBudget: 0 } },
+      contents: [prompt],
+      config: { thinkingConfig: { thinkingBudget: 500 } }, // small positive value
     });
 
+    // response may return an array, check for text
     const text =
-      response?.text || "I couldn't generate a reflection at this moment.";
+      response?.text ||
+      response?.candidates?.[0]?.content ||
+      "I couldn't generate a reflection at this moment.";
+
     return NextResponse.json({ reflection: text });
   } catch (err) {
-    // Keep server errors opaque to clients but log for debugging
-    // eslint-disable-next-line no-console
     console.error('generate-reflection error', err);
-    // If a DEBUG_SECRET is set in the server env, allow returning error details
-    // only when the caller supplies the matching header. This helps debug
-    // production issues without leaking sensitive info to the public.
-    const debugSecret = process.env.DEBUG_SECRET;
-    const provided = (req.headers.get('x-debug-secret') || '') as string;
-    if (debugSecret && provided && provided === debugSecret) {
-      const details =
-        err instanceof Error ? err.stack || err.message : String(err);
-      return NextResponse.json(
-        { error: 'Failed to generate reflection', details },
-        { status: 500 }
-      );
-    }
 
-    // In non-production environments we already return details earlier.
+    // Show error details in dev only
     if (process.env.NODE_ENV !== 'production') {
       const details = err instanceof Error ? err.message : String(err);
       return NextResponse.json(
