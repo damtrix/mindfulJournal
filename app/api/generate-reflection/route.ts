@@ -52,7 +52,21 @@ export async function POST(req: Request) {
     // Keep server errors opaque to clients but log for debugging
     // eslint-disable-next-line no-console
     console.error('generate-reflection error', err);
-    // During development/staging, return error details to aid debugging.
+    // If a DEBUG_SECRET is set in the server env, allow returning error details
+    // only when the caller supplies the matching header. This helps debug
+    // production issues without leaking sensitive info to the public.
+    const debugSecret = process.env.DEBUG_SECRET;
+    const provided = (req.headers.get('x-debug-secret') || '') as string;
+    if (debugSecret && provided && provided === debugSecret) {
+      const details =
+        err instanceof Error ? err.stack || err.message : String(err);
+      return NextResponse.json(
+        { error: 'Failed to generate reflection', details },
+        { status: 500 }
+      );
+    }
+
+    // In non-production environments we already return details earlier.
     if (process.env.NODE_ENV !== 'production') {
       const details = err instanceof Error ? err.message : String(err);
       return NextResponse.json(
@@ -60,6 +74,7 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
+
     return NextResponse.json(
       { error: 'Failed to generate reflection' },
       { status: 500 }
