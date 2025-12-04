@@ -52,6 +52,14 @@ export async function POST(req: Request) {
     // Keep server errors opaque to clients but log for debugging
     // eslint-disable-next-line no-console
     console.error('generate-reflection error', err);
+    // During development/staging, return error details to aid debugging.
+    if (process.env.NODE_ENV !== 'production') {
+      const details = err instanceof Error ? err.message : String(err);
+      return NextResponse.json(
+        { error: 'Failed to generate reflection', details },
+        { status: 500 }
+      );
+    }
     return NextResponse.json(
       { error: 'Failed to generate reflection' },
       { status: 500 }

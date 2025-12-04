@@ -28,6 +28,7 @@ export async function GET(req: Request) {
 
   // If neither protection is configured, refuse to return the anon key.
   if (!siteOrigin && !secret) {
+    console.log(secret);
     return NextResponse.json({
       url,
       anon: null,
